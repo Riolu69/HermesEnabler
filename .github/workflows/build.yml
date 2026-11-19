@@ -7,16 +7,26 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Replace Bundle ID
+      - name: Select latest available Xcode
         run: |
-          # Меняем базовый Bundle ID на ваш уникальный (обновится и в iOS, и в Watch-таргете)
+          LATEST_XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          echo "Using Xcode: $LATEST_XCODE"
+          sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Patch Bundle ID and Project Format
+        run: |
+          # 1. Меняем базовый Bundle ID на ваш уникальный
           find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/com\.example\.HermesEnabler/com.Riolu69.HermesEnabler/g' {} +
+          
+          # 2. Понижаем версию формата проекта (110 -> 77), чтобы Xcode открыл его без ошибок
+          sed -i '' 's/objectVersion = 110;/objectVersion = 77;/g' HermesEnabler2.xcodeproj/project.pbxproj
 
       - name: Build Xcode Project
         run: |
