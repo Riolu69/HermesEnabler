@@ -20,13 +20,33 @@ jobs:
           sudo xcode-select -s "$LATEST_XCODE/Contents/Developer"
           xcodebuild -version
 
-      - name: Patch Bundle ID and Project Format
+      - name: Patch Bundle ID, Project Format and AppIcon
         run: |
           # 1. Меняем базовый Bundle ID на ваш уникальный
           find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/com\.example\.HermesEnabler/com.Riolu69.HermesEnabler/g' {} +
           
-          # 2. Понижаем версию формата проекта (110 -> 77), чтобы Xcode открыл его без ошибок
+          # 2. Понижаем версию формата проекта (110 -> 77)
           sed -i '' 's/objectVersion = 110;/objectVersion = 77;/g' HermesEnabler2.xcodeproj/project.pbxproj
+
+          # 3. Создаем совместимую иконку 1024x1024 для всех AppIcon.appiconset, чтобы actool не падал
+          python3 -c '
+          import glob, json, os, subprocess
+          for iconset in glob.glob("**/AppIcon.appiconset", recursive=True):
+              png_path = os.path.join(iconset, "icon_1024.png")
+              if not os.path.exists(png_path):
+                  # Берем любую существующую png из папки или создаем пустую 1024x1024 через sips
+                  existing = glob.glob(os.path.join(iconset, "*.png"))
+                  if existing:
+                      subprocess.run(["sips", "-z", "1024", "1024", existing[0], "--out", png_path], check=True)
+                  else:
+                      subprocess.run(["python3", "-c", f"import zlib, struct; w=h=1024; raw=b\"\\x00\"+b\"\\x00\\x7a\\xff\"*w; data=zlib.compress(raw*h); png=b\"\\x89PNG\\r\\n\\x1a\\n\"+struct.pack(\">I\",13)+b\"IHDR\"+struct.pack(\">IIBBBBB\",w,h,8,2,0,0,0)+struct.pack(\">I\",zlib.crc32(b\"IHDR\"+struct.pack(\">IIBBBBB\",w,h,8,2,0,0,0))&0xffffffff)+struct.pack(\">I\",len(data))+b\"IDAT\"+data+struct.pack(\">I\",zlib.crc32(b\"IDAT\"+data)&0xffffffff)+struct.pack(\">I\",0)+b\"IEND\"+struct.pack(\">I\",zlib.crc32(b\"IEND\")&0xffffffff); open(\"{png_path}\",\"wb\").write(png)"], check=True)
+              contents = {
+                  "images": [{"filename": "icon_1024.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
+                  "info": {"author": "xcode", "version": 1}
+              }
+              with open(os.path.join(iconset, "Contents.json"), "w") as f:
+                  json.dump(contents, f, indent=2)
+          '
 
       - name: Build Xcode Project
         run: |
@@ -38,7 +58,8 @@ jobs:
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS=NO
 
       - name: Package IPA
         run: |
