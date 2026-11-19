@@ -25,10 +25,16 @@ jobs:
           # 1. Меняем базовый Bundle ID на ваш уникальный
           find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/com\.example\.HermesEnabler/com.Riolu69.HermesEnabler/g' {} +
           
-          # 2. Понижаем версию формата проекта (110 -> 77)
+          # 2. Добавляем ваш Team ID (.D7U65YY44A) в WKCompanionAppBundleIdentifier для совместимости с бесплатным аккаунтом SideStore/AltStore
+          find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/WKCompanionAppBundleIdentifier = com\.Riolu69\.HermesEnabler;/WKCompanionAppBundleIdentifier = com.Riolu69.HermesEnabler.D7U65YY44A;/g' {} +
+          find . -type f -name "Info.plist" -exec sed -i '' 's/<string>com\.Riolu69\.HermesEnabler<\/string>/<string>com.Riolu69.HermesEnabler.D7U65YY44A<\/string>/g' {} +
+          # Возвращаем исходное значение для основного iOS Info.plist (без Team ID, т.к. SideStore добавит его сам)
+          sed -i '' 's/com\.Riolu69\.HermesEnabler\.D7U65YY44A/com.Riolu69.HermesEnabler/g' HermesCompanion/Info.plist || true
+
+          # 3. Понижаем версию формата проекта (110 -> 77)
           sed -i '' 's/objectVersion = 110;/objectVersion = 77;/g' HermesEnabler2.xcodeproj/project.pbxproj
 
-          # 3. Создаем совместимую иконку 1024x1024 сразу для iOS и watchOS
+          # 4. Создаем совместимую иконку 1024x1024 сразу для iOS и watchOS
           python3 -c '
           import glob, json, os, subprocess
           for iconset in glob.glob("**/AppIcon.appiconset", recursive=True):
@@ -39,7 +45,6 @@ jobs:
               else:
                   subprocess.run(["python3", "-c", f"import zlib, struct; w=h=1024; raw=b\"\\x00\"+b\"\\x00\\x7a\\xff\"*w; data=zlib.compress(raw*h); png=b\"\\x89PNG\\r\\n\\x1a\\n\"+struct.pack(\">I\",13)+b\"IHDR\"+struct.pack(\">IIBBBBB\",w,h,8,2,0,0,0)+struct.pack(\">I\",zlib.crc32(b\"IHDR\"+struct.pack(\">IIBBBBB\",w,h,8,2,0,0,0))&0xffffffff)+struct.pack(\">I\",len(data))+b\"IDAT\"+data+struct.pack(\">I\",zlib.crc32(b\"IDAT\"+data)&0xffffffff)+struct.pack(\">I\",0)+b\"IEND\"+struct.pack(\">I\",zlib.crc32(b\"IEND\")&0xffffffff); open(\"{png_path}\",\"wb\").write(png)"], check=True)
               
-              # Удаляем старые png, чтобы не было предупреждений про unassigned child
               for old_png in existing:
                   if os.path.abspath(old_png) != os.path.abspath(png_path):
                       os.remove(old_png)
