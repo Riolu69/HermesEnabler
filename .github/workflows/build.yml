@@ -2,6 +2,12 @@ name: Build Custom IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      without_watch:
+        description: 'Собрать без приложения для Apple Watch (только для iPhone)'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: [ main, master ]
 
@@ -25,16 +31,10 @@ jobs:
           # 1. Меняем базовый Bundle ID на ваш уникальный
           find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/com\.example\.HermesEnabler/com.Riolu69.HermesEnabler/g' {} +
           
-          # 2. Добавляем ваш Team ID (.D7U65YY44A) в WKCompanionAppBundleIdentifier для совместимости с бесплатным аккаунтом SideStore/AltStore
-          find . -type f \( -name "project.pbxproj" -o -name "Info.plist" \) -exec sed -i '' 's/WKCompanionAppBundleIdentifier = com\.Riolu69\.HermesEnabler;/WKCompanionAppBundleIdentifier = com.Riolu69.HermesEnabler.D7U65YY44A;/g' {} +
-          find . -type f -name "Info.plist" -exec sed -i '' 's/<string>com\.Riolu69\.HermesEnabler<\/string>/<string>com.Riolu69.HermesEnabler.D7U65YY44A<\/string>/g' {} +
-          # Возвращаем исходное значение для основного iOS Info.plist (без Team ID, т.к. SideStore добавит его сам)
-          sed -i '' 's/com\.Riolu69\.HermesEnabler\.D7U65YY44A/com.Riolu69.HermesEnabler/g' HermesCompanion/Info.plist || true
-
-          # 3. Понижаем версию формата проекта (110 -> 77)
+          # 2. Понижаем версию формата проекта (110 -> 77)
           sed -i '' 's/objectVersion = 110;/objectVersion = 77;/g' HermesEnabler2.xcodeproj/project.pbxproj
 
-          # 4. Создаем совместимую иконку 1024x1024 сразу для iOS и watchOS
+          # 3. Создаем совместимую иконку 1024x1024 сразу для iOS и watchOS
           python3 -c '
           import glob, json, os, subprocess
           for iconset in glob.glob("**/AppIcon.appiconset", recursive=True):
@@ -73,11 +73,31 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS=NO
 
-      - name: Package IPA
+      - name: Patch Compiled Watch Info.plist and Package IPA
         run: |
           mkdir -p Payload
           APP_PATH=$(find build/Build/Products/Release-iphoneos -name "*.app" -maxdepth 1 | head -n 1)
           cp -r "$APP_PATH" Payload/
+
+          if [ "${{ github.event.inputs.without_watch }}" == "true" ]; then
+            echo "Removing Watch directory..."
+            rm -rf Payload/*.app/Watch
+          else
+            # Прямая правка скомпилированного Info.plist часов через PlistBuddy
+            for WATCH_PLIST in Payload/*.app/Watch/*.app/Info.plist; do
+              if [ -f "$WATCH_PLIST" ]; then
+                /usr/libexec/PlistBuddy -c "Set :WKCompanionAppBundleIdentifier com.Riolu69.HermesEnabler.D7U65YY44A" "$WATCH_PLIST" || \
+                /usr/libexec/PlistBuddy -c "Add :WKCompanionAppBundleIdentifier string com.Riolu69.HermesEnabler.D7U65YY44A" "$WATCH_PLIST"
+                
+                /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.Riolu69.HermesEnabler.D7U65YY44A.watchkitapp" "$WATCH_PLIST" || true
+                
+                echo "Verified Watch Info.plist values:"
+                /usr/libexec/PlistBuddy -c "Print :WKCompanionAppBundleIdentifier" "$WATCH_PLIST"
+                /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$WATCH_PLIST"
+              fi
+            done
+          fi
+
           zip -r HermesEnabler_custom.ipa Payload
 
       - name: Upload IPA Artifact
