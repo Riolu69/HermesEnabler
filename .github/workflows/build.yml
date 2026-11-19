@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
@@ -28,13 +28,12 @@ jobs:
           # 2. Понижаем версию формата проекта (110 -> 77)
           sed -i '' 's/objectVersion = 110;/objectVersion = 77;/g' HermesEnabler2.xcodeproj/project.pbxproj
 
-          # 3. Создаем совместимую иконку 1024x1024 для всех AppIcon.appiconset, чтобы actool не падал
+          # 3. Создаем совместимую иконку 1024x1024 для всех AppIcon.appiconset
           python3 -c '
           import glob, json, os, subprocess
           for iconset in glob.glob("**/AppIcon.appiconset", recursive=True):
               png_path = os.path.join(iconset, "icon_1024.png")
               if not os.path.exists(png_path):
-                  # Берем любую существующую png из папки или создаем пустую 1024x1024 через sips
                   existing = glob.glob(os.path.join(iconset, "*.png"))
                   if existing:
                       subprocess.run(["sips", "-z", "1024", "1024", existing[0], "--out", png_path], check=True)
@@ -54,7 +53,7 @@ jobs:
             -project HermesEnabler2.xcodeproj \
             -scheme HermesCompanion \
             -configuration Release \
-            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
